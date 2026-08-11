@@ -1,0 +1,24 @@
+# Gradle
+.gradle/
+build/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.classpath
+.project
+.settings/
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Dependency jars fetched or supplied locally.
+# purejavacomm 0.0.29 is the exception: it is not published to Maven Central under
+# any coordinate, so the build cannot resolve it. It is committed here to keep a
+# clean clone buildable without a manual step.
+libs/*.jar
+!libs/.gitkeep
+!libs/purejavacomm-0.0.29.jar
