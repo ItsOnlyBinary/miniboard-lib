@@ -1,0 +1,99 @@
+plugins {
+    id 'java-library'
+}
+
+group = 'com.itsonlybinary'
+version = project.findProperty('miniboardVersion') ?: '1.0.0'
+
+repositories {
+    mavenCentral()
+    flatDir { dirs "$projectDir/libs" }
+}
+
+// purejavacomm 0.0.29 is NOT on Maven Central. Verified 2026-07-27: HTTP 404 for
+// every candidate groupId (com.github.purejavacomm, com.sparetimelabs,
+// purejavacomm, org.bidib.com.github.purejavacomm). com.github.purejavacomm
+// publishes only 1.0.1.RELEASE and 1.0.2.RELEASE. The jar must be supplied by hand
+// at libs/purejavacomm-0.0.29.jar.
+//
+// Until it is present the dependency is simply omitted rather than declared and
+// left unresolvable: the protocol and value-type packages (Tasks 2-4) have no
+// serial dependency and compile fine without it. Transport and discovery
+// (Task 5 onward) will not compile, which is the correct signal.
+ext.purejavacommJar = file("$projectDir/libs/purejavacomm-0.0.29.jar")
+ext.havePurejavacomm = purejavacommJar.exists()
+
+dependencies {
+    if (havePurejavacomm) {
+        api files(purejavacommJar)
+    }
+    api 'net.java.dev.jna:jna:3.5.1'
+    api 'net.java.dev.jna:platform:3.5.1'
+
+    // 5.8.2 is the last JUnit 5 line supporting Java 8.
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.8.2'
+    // Gradle 8.3+ no longer auto-adds the platform launcher to the test
+    // runtime classpath; without this, ':test' fails with "Failed to load
+    // JUnit Platform." Not a pinned dependency, so no version is fixed.
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+java {
+    withSourcesJar()
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.release = 8
+    options.compilerArgs << '-Xlint:-options'
+}
+
+tasks.named('test', Test) {
+    useJUnitPlatform()
+    testLogging {
+        events 'passed', 'skipped', 'failed'
+        exceptionFormat 'full'
+    }
+    // Hardware tests are skipped unless explicitly requested:
+    //   gradlew test -Phardware=true
+    systemProperty 'miniboard.hardware', (project.findProperty('hardware') ?: 'false')
+}
+
+jar {
+    archiveBaseName = 'miniboard-lib'
+    manifest {
+        attributes(
+            'Implementation-Title'  : 'MiniBoard54 CDC Library',
+            'Implementation-Version': project.version,
+            'Automatic-Module-Name' : 'com.itsonlybinary.miniboard'
+        )
+    }
+}
+
+// Stage a drop-in folder: thin jar + its dependencies alongside.
+tasks.register('copyDeps', Copy) {
+    from configurations.runtimeClasspath
+    into layout.buildDirectory.dir('dist/libs')
+}
+
+tasks.register('dist', Copy) {
+    dependsOn tasks.jar, tasks.copyDeps
+    from tasks.jar.archiveFile
+    into layout.buildDirectory.dir('dist')
+    doLast {
+        println "Staged: ${layout.buildDirectory.get()}/dist"
+    }
+}
+
+if (!havePurejavacomm) {
+    gradle.projectsEvaluated {
+        logger.warn('')
+        logger.warn('*** libs/purejavacomm-0.0.29.jar is MISSING ***')
+        logger.warn('    It is not on Maven Central and must be supplied by hand.')
+        logger.warn('    Protocol and value-type code compiles without it;')
+        logger.warn('    transport and discovery will not.')
+        logger.warn('')
+    }
+}
+
+tasks.named('build') { dependsOn tasks.named('dist') }

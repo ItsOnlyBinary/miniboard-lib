@@ -1,0 +1,47 @@
+name: Release
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Read version
+        id: version
+        working-directory: java
+        run: |
+          version=$(grep -oP '^miniboardVersion=\K.*' gradle.properties)
+          if [ -z "$version" ]; then
+            echo "Could not read miniboardVersion from gradle.properties" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Build
+        working-directory: java
+        run: |
+          chmod +x gradlew
+          ./gradlew clean build
+
+      - name: Create release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: v${{ steps.version.outputs.version }}
+          generate_release_notes: true
+          files: |
+            java/build/libs/miniboard-lib-${{ steps.version.outputs.version }}.jar
+            java/build/libs/miniboard-lib-${{ steps.version.outputs.version }}-sources.jar
